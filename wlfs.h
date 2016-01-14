@@ -7,7 +7,7 @@
 // Unique magic number for this filesystem
 #define WLFS_MAGIC 0x5CA1AB1E
 // Version number
-#define WLFS_VERSION
+#define WLFS_VERSION '0.0'
 
 // Fixed indexes
 // Reserve 0th block for boot loader, just in case
