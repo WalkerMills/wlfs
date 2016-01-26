@@ -1,27 +1,18 @@
 /*
- * WLFS data structures, compile-time constants
+ * WLFS constants, default filesystem parameters
  */
 
 #pragma once
 
 #include <linux/types.h>
 
+// Fixed constants
 // Unique magic number for this filesystem
 #define WLFS_MAGIC 0x5CA1AB1E
 // Version number
 #define WLFS_VERSION '0.0'
-// Default block size: 4 KiB (assumes advanced format block device)
-#define WLFS_BLOCK_SIZE (1 << 12)
-// Default segment size: 2 MiB
-#define SEGMENT_SIZE (1 << 20)
-
-// Fixed constants
-// Reserve 0th block for boot loader, just in case
-#define SUPER_BLOCK_INDEX 1
-// There are two checkpoint blocks
-#define CHECKPOINT_BLOCK_INDEX (WLFS_SUPER_BLOCK_NUM + 1)
-// First block of the log (location of first segment)
-#define LOG_BLOCK_INDEX (WLFS_CHECKPOINT_BLOCK_NUM + 2)
+// Super block is stored in the first block for simplicity
+#define SUPER_BLOCK_INDEX 0
 // Root inode number
 #define ROOT_INODE_INDEX 1
 // Number of block pointers locally stored in an inode
@@ -40,51 +31,36 @@
 #define MIN_CLEAN_SEGS (1 << 5)
 // Stop cleaning when the # of clean segments rises above this value
 #define TARGET_CLEAN_SEGS (1 << 7)
-
-struct header {
-    __u64 ino;
-    __kernel_time_t wtime;
-    __u8 version;
-};
-
-struct block {
-    struct header h0;
-    struct header h1;
-    __u8 *data;
-};
-
-struct inode_map_block {
-    __u32 offset;
-    __u32 wtime;
-    __u64 *locations;
-    __u16 *versions;
-};
+// Default segment size: 2 MiB
+#define SEGMENT_SIZE (1 << 20)
+// Default block size: 4 KiB (assumes advanced format block device)
+#define WLFS_BLOCK_SIZE (1 << 12)
 
 struct inode_map {
-    struct inode_map_block **blocks;
+    struct block **blocks;
     __u32 nblocks;
     __u16 entries;
 };
 
-struct segment_map_block {
-    __u32 offset;
-    __u32 wtime;
-    __u8 **usage_maps;
+struct segment {
+    struct segment *prev;
+    struct segment *next;
+    struct block *block;
 };
 
 struct segment_map {
-    struct segment_map_block **blocks;
+    // Doubly linked list of segment map blocks
+    struct segment *blocks;
+    // Number of segment map blocks
     __u32 nblocks;
+    // Number of bitmaps per segment map block
     __u16 entries;
+    // Bits per segment usage bitmap = # blocks/segment
+    __u32 bits;
 };
 
-struct wlfs_super_meta {
-    __u16 block_size;
-    __u32 max_inodes;
-    __u32 segment_size;
-    __u8 buffer_period;
-    __u8 checkpoint_period;
-    __u8 indirection;
-    __u8 min_clean_segs;
-    __u8 target_clean_segs;
+struct wlfs_super {
+    struct wlfs_super_disk metadata;
+    struct inode_map imap;
+    struct segment_map segmap;
 };
