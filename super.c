@@ -19,6 +19,10 @@ static struct super_operations const wlfs_super_ops = {
     .put_super = wlfs_put_super,
 };
 
+static struct wlfs_super_disk *wlfs_read_super (struct super_block *sb) {
+    return NULL;
+}
+
 /*
  * Max file size = block size * (
  *      local block pointers per inode - 
@@ -62,7 +66,7 @@ int wlfs_fill_super (struct super_block *sb, void *data, int silent) {
     // Read the wlfs super block metadata from disk
     struct buffer_head *bh = sb_bread(sb, SUPER_BLOCK_INDEX);
     BUG_ON(!bh);
-    struct wlfs_super_disk *sb_meta = (struct wlfs_super_meta *) bh->b_data;
+    struct wlfs_super_disk *sb_meta = (struct wlfs_super_disk *) bh->b_data;
     BUG_ON(sb_meta->magic != WLFS_MAGIC);
 
     sb->s_magic = sb_meta->magic;

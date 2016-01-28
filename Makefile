@@ -14,5 +14,7 @@ clean:
 ko:
 	make -C $(KDIR) M=$(PWD) modules
 
+# mkfs-wlfs: private CFLAGS = -g
+mkfs-wlfs: util.o
 mkfs-wlfs_SOURCES:
-	mkfs-wlfs.c wlfs.h
+	mkfs-wlfs.c wlfs.h disk.h

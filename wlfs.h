@@ -1,16 +1,20 @@
 /*
- * WLFS constants, default filesystem parameters
+ * WLFS constants, default filesystem parameters, in-memory data structures
  */
 
 #pragma once
 
 #include <linux/types.h>
 
+#include "disk.h"
+
 // Fixed constants
 // Unique magic number for this filesystem
-#define WLFS_MAGIC 0x5CA1AB1E
+#define WLFS_MAGIC 0x5CA1AB1EUL
 // Version number
 #define WLFS_VERSION '0.0'
+// Start the filesystem at LBA 40 to avoid clobbering GPT & 4K align the data
+#define WLFS_OFFSET 163840
 // Super block is stored in the first block for simplicity
 #define SUPER_BLOCK_INDEX 0
 // Root inode number
@@ -35,6 +39,15 @@
 #define SEGMENT_SIZE (1 << 20)
 // Default block size: 4 KiB (assumes advanced format block device)
 #define WLFS_BLOCK_SIZE (1 << 12)
+
+struct block {
+    // Two headers, in case of mid-update crashes
+    struct header h0;
+    struct header h1;
+    // Could be inode #, or map block #
+    __u64 index;
+    __u8 *data;
+};
 
 struct inode_map {
     struct block **blocks;

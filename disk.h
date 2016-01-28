@@ -1,5 +1,5 @@
 /*
- * On-disk data structures
+ * On-disk metadata structures
  */
 
 #pragma once
@@ -12,13 +12,10 @@ struct header {
     __u8 version;
 };
 
-struct block {
-    // Two headers, in case of mid-update crashes
+struct block_disk {
     struct header h0;
     struct header h1;
-    // Could be inode #, or map block #
     __u64 index;
-    __u8 *data;
 };
 
 struct wlfs_super_disk {
