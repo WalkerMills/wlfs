@@ -1,3 +1,10 @@
 .config
 image
-mount
+mkfs-wlfs
+*.ko
+*.o
+*.cmd
+*.mod.c
+*.order
+*.symvers
+.tmp_versions
