@@ -1,18 +1,16 @@
 obj-m := wlfs.o
-wlfs-objs := init.o super.o
+wlfs-objs := init.o super.o util.o
 
-KDIR := /lib/modules/$(shell uname -r)/build
-
-CFLAGS_init.o = -Wno-error=declaration-after-statement
+KDIR := /lib/modules/$(shell uname -r)
 
 all: ko mkfs-wlfs
 
 clean:
-	make -C $(KDIR) M=$(PWD) clean
+	$(MAKE) -C $(KDIR)/build M=$(PWD) clean
 	$(RM) mkfs-wlfs
 
 ko:
-	make -C $(KDIR) M=$(PWD) modules
+	$(MAKE) -C $(KDIR)/build M=$(PWD) modules
 
 # mkfs-wlfs: private CFLAGS = -g
 mkfs-wlfs: util.o

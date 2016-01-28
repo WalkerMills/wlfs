@@ -1,12 +1,10 @@
 /*
- * WLFS constants, default filesystem parameters, in-memory data structures
+ * WLFS constants, default filesystem parameters, common data structures
  */
 
 #pragma once
 
 #include <linux/types.h>
-
-#include "disk.h"
 
 // Fixed constants
 // Unique magic number for this filesystem
@@ -15,8 +13,6 @@
 #define WLFS_VERSION '0.0'
 // Start the filesystem at LBA 40 to avoid clobbering GPT & 4K align the data
 #define WLFS_OFFSET 163840
-// Super block is stored in the first block for simplicity
-#define SUPER_BLOCK_INDEX 0
 // Root inode number
 #define ROOT_INODE_INDEX 1
 // Number of block pointers locally stored in an inode
@@ -40,12 +36,22 @@
 // Default block size: 4 KiB (assumes advanced format block device)
 #define WLFS_BLOCK_SIZE (1 << 12)
 
-struct block {
+struct header {
+    __kernel_time_t wtime;
+    // Incremented when the file is deleted/trunctated
+    __u8 version;
+};
+
+struct block_meta {
     // Two headers, in case of mid-update crashes
     struct header h0;
     struct header h1;
     // Could be inode #, or map block #
     __u64 index;
+};
+
+struct block {
+    struct block_meta meta;
     __u8 *data;
 };
 
@@ -72,8 +78,16 @@ struct segment_map {
     __u32 bits;
 };
 
-struct wlfs_super {
-    struct wlfs_super_disk metadata;
-    struct inode_map imap;
-    struct segment_map segmap;
+struct wlfs_super_meta {
+    __u16 block_size;
+    __u16 checkpoint_blocks;
+    __u32 inodes;
+    __u32 magic;
+    __u32 segment_size;
+    __u32 segments;
+    __u8 buffer_period;
+    __u8 checkpoint_period;
+    __u8 indirection;
+    __u8 min_clean_segs;
+    __u8 target_clean_segs;
 };

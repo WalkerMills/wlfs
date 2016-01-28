@@ -3,7 +3,6 @@
  */
 
 #include <linux/compiler.h>
-#include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 
@@ -18,7 +17,7 @@ static struct file_system_type wlfs_type = {
     .owner = THIS_MODULE,
     .name = "wlfs",
     .mount = wlfs_mount,
-    .kill_sb = kill_block_super,
+    .kill_sb = wlfs_kill_sb,
     .fs_flags = FS_REQUIRES_DEV,
 };
 
