@@ -21,8 +21,8 @@ struct block_disk {
 struct wlfs_super_disk {
     __u16 block_size;
     __u16 checkpoint_blocks;
-    __u16 magic;
     __u32 inodes;
+    __u32 magic;
     __u32 segment_size;
     __u32 segments;
     __u8 buffer_period;
