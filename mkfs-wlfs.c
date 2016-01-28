@@ -93,15 +93,14 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
     switch (key) {
     case 'b':
 #define LOGICAL_BLOCK_SIZE 512
-#define MAX_BLOCK_SIZE 4096
         if (value < 1) {
             argp_error(state, "Block size of %huB is too small\n", value);
         } else if (value % LOGICAL_BLOCK_SIZE != 0) {
             argp_error(state, "Block size must be a multiple of %uB\n",
                        LOGICAL_BLOCK_SIZE);
-        } else if (value > MAX_BLOCK_SIZE) {
+        } else if (value > WLFS_BLOCK_SIZE) {
             argp_error(state, "Block size must be <= %dB\n", 
-                       MAX_BLOCK_SIZE);
+                       WLFS_BLOCK_SIZE);
         }
 #ifndef NDEBUG
         printf("Block size: %hu\n", value);
@@ -173,9 +172,9 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
         } else if (value % LOGICAL_BLOCK_SIZE != 0) {
             argp_error(state, "Segment size must be a multiple of %uB\n",
                        LOGICAL_BLOCK_SIZE);
-        } else if (value < MAX_BLOCK_SIZE) {
+        } else if (value < WLFS_BLOCK_SIZE) {
             argp_error(state, "Segment size must be at least %dB\n",
-                       MAX_BLOCK_SIZE);
+                       WLFS_BLOCK_SIZE);
         }
 #ifndef NDEBUG
         printf("Segment size: %u\n", value);
