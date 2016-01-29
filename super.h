@@ -21,4 +21,5 @@ struct wlfs_super {
     struct segment_map segmap;
     struct kmem_cache *imap_cache;
     struct kmem_cache *segmap_cache;
+    struct kmem_cache *segment_cache;
 };

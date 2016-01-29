@@ -1,7 +1,7 @@
 #include "util.h"
 
 __u16 get_block_bytes (struct wlfs_super_meta *meta) {
-    return meta->block_size - sizeof(struct block_meta);
+    return meta->block_size - sizeof(struct block);
 }
 
 __u16 get_imap_entries (struct wlfs_super_meta *meta) {

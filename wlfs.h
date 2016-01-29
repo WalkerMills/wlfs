@@ -42,17 +42,12 @@ struct header {
     __u8 version;
 };
 
-struct block_meta {
+struct block {
     // Two headers, in case of mid-update crashes
     struct header h0;
     struct header h1;
     // Could be inode #, or map block #
     __u64 index;
-};
-
-struct block {
-    struct block_meta meta;
-    __u8 *data;
 };
 
 struct inode_map {
