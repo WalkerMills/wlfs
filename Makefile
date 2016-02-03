@@ -13,6 +13,6 @@ ko:
 	$(MAKE) -C $(KDIR)/build M=$(PWD) modules
 
 # mkfs-wlfs: private CFLAGS = -g
-mkfs-wlfs: util.o
-mkfs-wlfs_SOURCES:
-	mkfs-wlfs.c wlfs.h disk.h
+util-user.o: util.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+mkfs-wlfs: util-user.o

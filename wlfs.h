@@ -42,6 +42,8 @@ struct header {
     __u8 version;
 };
 
+// This is basically a block header; there's always one at the head of a
+// block, and the remaining space is data
 struct block {
     // Two headers, in case of mid-update crashes
     struct header h0;
