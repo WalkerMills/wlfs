@@ -1,5 +1,4 @@
 #include <argp.h>
-#include <assert.h>
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <stdbool.h>
