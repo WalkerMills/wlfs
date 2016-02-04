@@ -64,12 +64,12 @@ int wlfs_fill_super (struct super_block *sb, void *data, int silent) {
     BUG_ON(WLFS_OFFSET % sb->s_bdev->bd_block_size != 0);
     // Read the on-disk superblock into memory
     sector_t offset = WLFS_OFFSET / sb->s_bdev->bd_block_size;
-    struct buffer_head *bh = __bread(sb->s_bdev, offset, 
-                                     sizeof(struct wlfs_super_meta));
+    struct buffer_head *bh = __getblk(sb->s_bdev, offset, 
+                                      sb->s_bdev->bd_block_size);
     BUG_ON(!bh);
     struct wlfs_super *wlfs_sb = 
         (struct wlfs_super *) kzalloc(sizeof(struct wlfs_super), GFP_NOFS);
-    memcpy(wlfs_sb, bh->b_data, sizeof(struct wlfs_super_meta));
+    memcpy(&wlfs_sb->meta, bh->b_data, sizeof(struct wlfs_super_meta));
     brelse(bh);
     // Check that the data was read & copied correctly
     BUG_ON(wlfs_sb->meta.magic != WLFS_MAGIC);
