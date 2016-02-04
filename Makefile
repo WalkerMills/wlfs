@@ -12,7 +12,7 @@ clean:
 ko:
 	$(MAKE) -C $(KDIR)/build M=$(PWD) modules
 
-# mkfs-wlfs: private CFLAGS = -g
+mkfs-wlfs: private CFLAGS = -Wall
 util-user.o: util.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 mkfs-wlfs: util-user.o

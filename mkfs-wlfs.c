@@ -1,4 +1,5 @@
 #include <argp.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <stdbool.h>
@@ -15,8 +16,33 @@
 // Data structure for holding parsed argp parameters
 struct arguments {
     char *device;
+    bool round;
     struct wlfs_super_meta sb;
 };
+// Return codes
+enum return_code {
+    SUCCESS,
+    DEVICE_ERROR,       // Something went wrong with the block device
+    INVALID_ARGUMENT,   // An invalid argument was supplied
+    ILLEGAL_CONFIG,     // Argument choice caused an illegal configuration
+};
+
+// Compute derived filesystem parameters (e.g., segment count) and either
+// round or reject misaligned block/segment sizes
+static enum return_code build_super (int fd, struct wlfs_super_meta *sb, 
+                                     bool round);
+// Check if the named value's highest set bit is within the lowest <bits> bits
+static bool check_overflow (__u64 value, unsigned bits);
+// Calculate the number of segments in the block device; may return -1 if an
+// error occurs
+static __u32 get_segments (struct wlfs_super_meta *sb, __u64 size);
+// Calculate the number of checkpoint blocks; may return -1 if an error occurs
+static __u16 get_checkpoint_blocks (struct wlfs_super_meta *sb);
+// Argp argument parser
+static error_t parse_opt (int key, char *arg, struct argp_state *state);
+// Persist the superblock to the block device
+static enum return_code write_super (int fd, struct wlfs_super_meta *sb);
+
 // Description of argp keyword parameters
 static struct argp_option options[] = {
     {"block-size", 'b', "size", 0, "Block size (bytes)"},
@@ -29,22 +55,12 @@ static struct argp_option options[] = {
     {"segment-size", 's', "size", 0, "Segment size (bytes)"},
     {"target-clean", 't', "num", 0, 
      "Stop cleaning when the number of clean segments rises above this value"},
+    {"round", 'r', 0, 0, 
+     "Round block/segment size up to the nearest sector/block boundary"},
     {0}
 };
 // Description of argp positional parameters
 static char args_doc[] = "device";
-
-// Check if the named value's highest set bit is within the lowest <bits> bits
-static bool check_overflow (__u64 value, unsigned bits);
-// Calculate the number of segments in the block device; may return -1 if an
-// error occurs
-static __u32 get_segments (struct wlfs_super_meta *sb, __u64 size);
-// Calculate the number of checkpoint blocks; may return -1 if an error occurs
-static __u16 get_checkpoint_blocks (struct wlfs_super_meta *sb);
-// Argp argument parser
-static error_t parse_opt (int key, char *arg, struct argp_state *state);
-// Persist the superblock to the block device
-static int write_super (struct arguments *arguments);
 
 int main (int argc, char **argv) {
     // Initialize argp parser
@@ -63,8 +79,19 @@ int main (int argc, char **argv) {
     // Parse commandline arguments
     argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
-    // Write super block to disk
-    int ret = write_super(&arguments);
+    int fd = open(arguments.device, O_RDWR | O_DSYNC);
+    if (fd < 0) {
+        fprintf(stderr, "Opening %s failed\n", arguments.device);
+        return -DEVICE_ERROR;
+    }
+
+    // Sanitize input and compute derived values
+    int ret = build_super(fd, &arguments.sb, arguments.round);
+    if (ret < 0) {
+        fprintf(stderr, "Failed to compute filesystem parameters for %s\n",
+                arguments.device);
+        goto exit;
+    }
 #ifndef NDEBUG
     printf("Block size: %hu\n"
            "Buffer period: %hhu\n"
@@ -82,6 +109,16 @@ int main (int argc, char **argv) {
            arguments.sb.min_clean_segs, arguments.sb.segments,
            arguments.sb.segment_size, arguments.sb.target_clean_segs);
 #endif
+
+    // Write super block to disk
+    ret = write_super(fd, &arguments.sb);
+    if (ret < 0) {
+        fprintf(stderr, "Failed to write superblock to %s\n", 
+                arguments.device);
+    }
+
+exit:
+    close(fd);
     return ret;
 }
 
@@ -89,16 +126,85 @@ int main (int argc, char **argv) {
  * Helper functions
  */
 
+enum return_code build_super (int fd, struct wlfs_super_meta *sb, bool round) {
+    __u64 block_size;
+    __u64 size;
+    struct stat buf;
+
+    // Find the physical block size & block device size; ioctl's will not work
+    // when fd refers to a file, so fall back to fstat
+    if (ioctl(fd, BLKPBSZGET, &block_size) < 0 || 
+        ioctl(fd, BLKGETSIZE64, &size) < 0) {
+        fprintf(stderr, "ioctl failed, falling back to fstat\n");
+        if (fstat(fd, &buf) < 0) {
+            fprintf(stderr, "fstat failed\n");
+            return -DEVICE_ERROR;
+        }
+        block_size = buf.st_blksize;
+        size = buf.st_size;
+    }
+#ifndef NDEBUG
+    printf("Device is %lluB, with %lluB blocks\n", size, block_size);
+#endif
+
+    if (round) {
+        // Round the block & segment sizes up
+        sb->block_size += sb->block_size % ((__u16) block_size);
+        sb->segment_size += sb->segment_size % sb->block_size;
+    } else {
+        // Reject incorrect sizes            
+        if (sb->block_size % ((__u16) block_size) != 0) {
+            fprintf(stderr, 
+                    "%huB (block size) %% %lluB (physical) != 0, consider "
+                    "using -r\n",
+                    sb->block_size,
+                    block_size);
+            return -INVALID_ARGUMENT;
+        } else if (sb->segment_size % sb->block_size != 0) {
+            fprintf(stderr, 
+                    "%uB (segment size) %% %huB (block size) != 0, consider "
+                    "using -r\n", 
+                    sb->segment_size, 
+                    sb->block_size);
+            return -INVALID_ARGUMENT;
+        }
+    }
+
+    // Set the number of checkpoint blocks
+    __u16 checkpoint_blocks = get_checkpoint_blocks(sb);
+    if (checkpoint_blocks < 2) {
+        fprintf(stderr, "Failed to get number of checkpoint blocks\n");
+        return -ILLEGAL_CONFIG;
+    }
+    sb->checkpoint_blocks = checkpoint_blocks;
+
+    // Set total number of segments
+    __u32 segments = get_segments(sb, size);
+    if (segments == 0) {
+        fprintf(stderr, "Not enough space for wlfs\n");
+        return -ILLEGAL_CONFIG;
+    } else if (segments < 1) {
+        fprintf(stderr, "Failed to get number of segments\n");
+        return -INVALID_ARGUMENT;
+    }
+    sb->segments = segments;
+
+    return SUCCESS;
+}
+
+
 bool check_overflow (__u64 value, unsigned bits) {
     return (value & ((1ULL << bits) - 1)) == value;
 }
 
+// get_checkpoint_blocks must be called first
 __u32 get_segments (struct wlfs_super_meta *sb, __u64 size) {
-    __u64 segments = size / sb->segment_size;
+    __u64 segments = 
+        (size - WLFS_OFFSET - (sb->checkpoint_blocks + 1) * sb->block_size) / 
+        sb->segment_size;
     if (!check_overflow(segments, 32)) {
-        fprintf(stderr, "Number of segments doesn't fit into 32 bits\n",
-                segments);
-        return -1;
+        fprintf(stderr, "Number of segments doesn't fit into 32 bits\n");
+        return -INVALID_ARGUMENT;
     }
     return segments;
 }
@@ -123,9 +229,8 @@ __u16 get_checkpoint_blocks (struct wlfs_super_meta *sb) {
         segmap_blocks / entries + (segmap_blocks % entries != 0);
     if (!check_overflow(checkpoint_blocks, 16)) {
         fprintf(stderr, 
-                "Number of checkpoint blocks doesn't fit into 16 bits\n", 
-                checkpoint_blocks);
-        return -1;
+                "Number of checkpoint blocks doesn't fit into 16 bits\n");
+        return -INVALID_ARGUMENT;
     }
     return checkpoint_blocks;
 }
@@ -139,15 +244,10 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
 
     switch (key) {
     case 'b':
-#define LOGICAL_BLOCK_SIZE 512
         if (value < 1) {
-            argp_error(state, "Block size of %huB is too small\n", value);
-        } else if (value % LOGICAL_BLOCK_SIZE != 0) {
-            argp_error(state, "Block size must be a multiple of %uB\n",
-                       LOGICAL_BLOCK_SIZE);
-        } else if (value > WLFS_BLOCK_SIZE) {
-            argp_error(state, "Block size must be <= %dB\n", 
-                       WLFS_BLOCK_SIZE);
+            argp_error(state, "Block size of %lluB is too small\n", value);
+        } else if (value > (__u64) getpagesize()){
+            argp_error(state, "Block size must be <= %dB\n", getpagesize());
         }
         arguments->sb.block_size = value;
         break;
@@ -155,7 +255,7 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
     case 'w':
         if (value < 1) {
             argp_error(state, 
-                       "Write-back period of %hhu seconds is too small\n", 
+                       "Write-back period of %llu seconds is too small\n", 
                        value);
         } else if (!check_overflow(value, 8)) {
             argp_error(state, "Write-back period doesn't fit into 8 bits");
@@ -166,7 +266,7 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
     case 'c':
         if (value < 1) {
             argp_error(state, 
-                       "Checkpoint period of %hhu seconds is too small\n", 
+                       "Checkpoint period of %llu seconds is too small\n", 
                        value);
         } else if (!check_overflow(value, 8)) {
             argp_error(state, "Checkpoint period doesn't fit into 8 bits");
@@ -175,8 +275,8 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
         break;
 
     case 'i':
-        if (value < 0) {
-            argp_error(state, "Indirection depth of %hhu is too small\n", 
+        if (value == 0) {
+            argp_error(state, "Indirection depth of %llu is too small\n", 
                        value);
         } else if (!check_overflow(value, 8)) {
             argp_error(state, "Indirection doesn't fit into 8 bits");
@@ -186,7 +286,7 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
 
     case 'n':
         if (value < 1) {
-            argp_error(state, "%u is not enough inodes\n", value);
+            argp_error(state, "%llu is not enough inodes\n", value);
         } else if (!check_overflow(value, 32)) {
             argp_error(state, "Max inode count doesn't fit into 32 bits");
         }
@@ -196,7 +296,7 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
     case 'm':
         if (value < 1) {
             argp_error(state, 
-                       "A threshold of %hhu will never trigger cleaning\n", 
+                       "A threshold of %llu will never trigger cleaning\n", 
                        value);
         } else if (!check_overflow(value, 8)) {
             argp_error(state, 
@@ -209,9 +309,6 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
         if (value < WLFS_BLOCK_SIZE) {
             argp_error(state, "Segment size must be at least %dB\n",
                        WLFS_BLOCK_SIZE);
-        } else if (value % WLFS_BLOCK_SIZE != 0) {
-            argp_error(state, "Segment size must be a multiple of %uB\n",
-                       WLFS_BLOCK_SIZE);
         } else if (!check_overflow(value, 32)) {
             argp_error(state, "Segment size doesn't fit into 32 bits");
         }
@@ -220,12 +317,16 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
 
     case 't':
         if (value < 1) {
-            argp_error(state, "A threshold of %hhu will prevent cleaning\n", 
+            argp_error(state, "A threshold of %llu will prevent cleaning\n", 
                        value);
         } else if (!check_overflow(value, 8)) {
             argp_error(state, "Target clean segments doesn't fit into 8 bits");
         }
         arguments->sb.buffer_period = value;
+        break;
+
+    case 'r':
+        arguments->round = true;
         break;
 
     case ARGP_KEY_ARG:
@@ -248,63 +349,16 @@ error_t parse_opt (int key, char *arg, struct argp_state *state) {
     return 0;
 }
 
-int write_super (struct arguments *arguments) {
-    ssize_t ret = -1;
-    int fd = open(arguments->device, O_RDWR | O_DSYNC);
-    if (fd < 0) {
-        fprintf(stderr, "Opening %s failed\n", arguments->device);
+enum return_code write_super (int fd, struct wlfs_super_meta *sb) {
+    // Write super block to the correct sector of the block device
+    ssize_t ret = pwrite(fd, sb, sizeof(struct wlfs_super_meta), WLFS_OFFSET);
+    if (ret < 0) {
+        fprintf(stderr, "pwrite failed with error code %zd\n", ret);
         return ret;
     }
-
-    // Get the size of the block device; this ioctl will fail when fd refers
-    // to a file, so fall back to fstat if necessary
-    __u64 size;
-    if (ioctl(fd, BLKGETSIZE64, &size) < 0) {
-        fprintf(stderr, "ioctl failed to get size, falling back to fstat\n");
-        struct stat buf;
-        if (fstat(fd, &buf) < 0) {
-            fprintf(stderr, "fstat failed for %s\n", arguments->device);
-            goto exit;
-        }
-        size = buf.st_size;
-    }
-    // Make sure there's at least enough room for the superblock
-    if (size < WLFS_OFFSET + arguments->sb.block_size) {
-        fprintf(stderr, "%s is too small (%lluB) to write superblock\n", 
-                arguments->device, size);
-        goto exit;
-    }
 #ifndef NDEBUG
-    printf("%s is %llu bytes\n", arguments->device, size);
+    printf("Sucessfully wrote wlfs super block\n");
 #endif
 
-    // Set total number of segments
-    __u32 segments = get_segments(&arguments->sb, size);
-    if (segments < 0) {
-        fprintf(stderr, "Failed to get number of segments\n");
-        goto exit;
-    }
-    arguments->sb.segments = segments;
-    // Set the number of checkpoint blocks
-    __u16 checkpoint_blocks = get_checkpoint_blocks(&arguments->sb);
-    if (checkpoint_blocks < 0) {
-        fprintf(stderr, "Failed to get number of checkpoint blocks\n");
-        goto exit;
-    }
-    arguments->sb.checkpoint_blocks = checkpoint_blocks;
-
-    // Write super block to the correct sector of the block device
-    ret = pwrite(fd, &arguments->sb, sizeof(struct wlfs_super_meta), 
-                 WLFS_OFFSET);
-    if (ret < 0) {
-        fprintf(stderr, "Writing superblock failed with error code %zd\n", 
-                ret);
-        goto exit;
-    }
-
-    printf("Sucessfully wrote wlfs super block\n");
-
-exit:
-    close(fd);
     return ret;
 }
