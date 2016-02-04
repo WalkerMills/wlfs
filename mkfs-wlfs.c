@@ -86,7 +86,7 @@ int main (int argc, char **argv) {
 
     // Sanitize input and compute derived values
     int ret = build_super(fd, &arguments.sb, arguments.round);
-    if (ret < 0) {
+    if (ret != SUCCESS) {
         fprintf(stderr, "Failed to compute filesystem parameters for %s\n",
                 arguments.device);
         goto exit;
@@ -111,7 +111,7 @@ int main (int argc, char **argv) {
 
     // Write super block to disk
     ret = write_super(fd, &arguments.sb);
-    if (ret < 0) {
+    if (ret != SUCCESS) {
         fprintf(stderr, "Failed to write superblock to %s\n", 
                 arguments.device);
     }
@@ -353,11 +353,11 @@ enum return_code write_super (int fd, struct wlfs_super_meta *sb) {
     ssize_t ret = pwrite(fd, sb, sizeof(struct wlfs_super_meta), WLFS_OFFSET);
     if (ret < 0) {
         fprintf(stderr, "pwrite failed with error code %zd\n", ret);
-        return ret;
+        return -DEVICE_ERROR;
     }
 #ifndef NDEBUG
     printf("Sucessfully wrote wlfs super block\n");
 #endif
 
-    return ret;
+    return SUCCESS;
 }
