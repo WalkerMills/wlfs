@@ -41,7 +41,8 @@ void wlfs_kill_sb (struct super_block *sb) {
 #ifndef NDEBUG
     printk(KERN_DEBUG "Freeing superblock\n");
 #endif
-    kfree(sb->s_fs_info);
+    kill_block_super(sb);
+    printk(KERN_INFO "Freed superblock\n");
 }
 
 void wlfs_put_super (struct super_block *sb) {
@@ -52,6 +53,7 @@ void wlfs_put_super (struct super_block *sb) {
     kmem_cache_destroy(wlfs_sb->imap_cache);
     kmem_cache_destroy(wlfs_sb->segmap_cache);
     kmem_cache_destroy(wlfs_sb->segment_cache);
+    kfree(wlfs_sb);
 }
 
 int wlfs_fill_super (struct super_block *sb, void *data, int silent) {
@@ -64,8 +66,7 @@ int wlfs_fill_super (struct super_block *sb, void *data, int silent) {
     BUG_ON(WLFS_OFFSET % sb->s_bdev->bd_block_size != 0);
     // Read the on-disk superblock into memory
     sector_t offset = WLFS_OFFSET / sb->s_bdev->bd_block_size;
-    struct buffer_head *bh = __getblk(sb->s_bdev, offset, 
-                                      sb->s_bdev->bd_block_size);
+    struct buffer_head *bh = sb_bread(sb, offset);
     BUG_ON(!bh);
     struct wlfs_super *wlfs_sb = 
         (struct wlfs_super *) kzalloc(sizeof(struct wlfs_super), GFP_NOFS);
@@ -73,6 +74,9 @@ int wlfs_fill_super (struct super_block *sb, void *data, int silent) {
     brelse(bh);
     // Check that the data was read & copied correctly
     BUG_ON(wlfs_sb->meta.magic != WLFS_MAGIC);
+#ifndef NDEBUG
+    printk(KERN_DEBUG "Read superblock metadata\n");
+#endif
     
     // TODO: read imap, segmap from disk
     wlfs_sb->imap_cache = kmem_cache_create(
