@@ -2,7 +2,7 @@
 A log-based filesystem
 
 ## Build environment
-You must download the Linux kernel source to compile this kernel module.  On Arch Linux:
+You must download the Linux kernel headers to compile this kernel module.  On Arch Linux:
 ```
 # pacman -S linux-headers
 # cd /usr/lib/$(uname -r)/build
