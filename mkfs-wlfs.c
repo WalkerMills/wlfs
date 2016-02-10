@@ -160,14 +160,6 @@ enum return_code build_super (int fd, struct wlfs_super_meta *sb, bool round) {
     printf("Device is %lluB, with %huB blocks\n", size, sb->block_size);
 #endif
 
-    // Set the number of checkpoint blocks
-    __u16 checkpoint_blocks = get_checkpoint_blocks(sb);
-    if (checkpoint_blocks < 2) {
-        fprintf(stderr, "Failed to get number of checkpoint blocks\n");
-        return -ILLEGAL_CONFIG;
-    }
-    sb->checkpoint_blocks = checkpoint_blocks;
-
     // Set total number of segments
     __u32 segments = get_segments(sb, size);
     if (segments == 0) {
@@ -179,6 +171,21 @@ enum return_code build_super (int fd, struct wlfs_super_meta *sb, bool round) {
     }
     sb->segments = segments;
 
+    // Set the number of checkpoint blocks
+    __u16 checkpoint_blocks = get_checkpoint_blocks(sb);
+    if (checkpoint_blocks < 2) {
+        fprintf(stderr, "Failed to get number of checkpoint blocks\n");
+        return -ILLEGAL_CONFIG;
+    }
+    sb->checkpoint_blocks = checkpoint_blocks;
+    // Calculate the number of segments that are actually checkpoint blocks,
+    // rounding up
+    __u32 checkpoint_segments = 
+        (sb->checkpoint_blocks * sb->block_size + sb->segment_size - 1) / 
+        sb->segment_size;
+    // Update segments to account for checkpoint blocks
+    sb->segments -= checkpoint_segments;
+
     return SUCCESS;
 }
 
@@ -189,9 +196,7 @@ bool check_overflow (__u64 value, unsigned bits) {
 
 // get_checkpoint_blocks must be called first
 __u32 get_segments (struct wlfs_super_meta *sb, __u64 size) {
-    __u64 segments = 
-        (size - WLFS_OFFSET - (sb->checkpoint_blocks + 1) * sb->block_size) / 
-        sb->segment_size;
+    __u64 segments = (size - WLFS_OFFSET - sb->block_size) / sb->segment_size;
     if (!check_overflow(segments, 32)) {
         fprintf(stderr, "Number of segments doesn't fit into 32 bits\n");
         return -INVALID_ARGUMENT;
