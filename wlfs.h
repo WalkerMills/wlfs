@@ -10,7 +10,7 @@
 // Unique magic number for this filesystem
 #define WLFS_MAGIC 0x5CA1AB1EUL
 // Version number
-#define WLFS_VERSION '0.0'
+#define WLFS_VERSION '0.1'
 // Start the filesystem at LBA 40 to avoid clobbering GPT & 4K align the data
 #define WLFS_OFFSET 163840
 // Root inode number
