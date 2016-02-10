@@ -1,5 +1,8 @@
 #include "util.h"
 
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+
 __u16 get_block_bytes (struct wlfs_super_meta *meta) {
     return meta->block_size - sizeof(struct block);
 }
@@ -10,7 +13,7 @@ __u16 get_imap_entries (struct wlfs_super_meta *meta) {
 
 
 __u32 get_imap_blocks (struct wlfs_super_meta *meta) {
-    return meta->inodes / get_imap_entries(meta);
+    return MAX(meta->inodes / get_imap_entries(meta), 1);
 }
 
 /*
@@ -46,14 +49,6 @@ __u64 get_max_bytes (struct wlfs_super_meta *meta) {
     return size;
 }
 
-__u16 get_segmap_bits (struct wlfs_super_meta *meta) {
-    return meta->segment_size / meta->block_size;
-}
-
-__u16 get_segmap_entries (struct wlfs_super_meta *meta) {
-    return get_block_bytes(meta) / (get_segmap_bits(meta) >> 3);
-}
-
 __u32 get_segmap_blocks (struct wlfs_super_meta *meta) {
-    return meta->segments / get_segmap_entries(meta);
+    return MAX(meta->segments / (get_block_bytes(meta) << 3), 1);
 }

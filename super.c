@@ -65,8 +65,8 @@ int wlfs_fill_super (struct super_block *sb, void *data, int silent) {
     // If the superblock is not aligned, something is very wrong
     BUG_ON(WLFS_OFFSET % sb->s_bdev->bd_block_size != 0);
     // Read the on-disk superblock into memory
-    sector_t offset = WLFS_OFFSET / sb->s_bdev->bd_block_size;
-    struct buffer_head *bh = sb_bread(sb, offset);
+    struct buffer_head *bh = 
+        sb_bread(sb, WLFS_OFFSET / sb->s_bdev->bd_block_size);
     BUG_ON(!bh);
     struct wlfs_super *wlfs_sb = 
         (struct wlfs_super *) kzalloc(sizeof(struct wlfs_super), GFP_NOFS);

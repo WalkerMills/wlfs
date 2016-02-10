@@ -1,42 +1,45 @@
 #!/bin/bash
 
-MODULE=$(sed -rn 's/.*name = "(.*?)".*/\1/p' init.c)
-
-DEV_SIZE=1073741824
-BLOCK_SIZE=$(lsblk -o MOUNTPOINT,PHY-SEC | 
-             grep "$(df . --output=target | tail -n 1)" | awk '{print $2}')
-BLOCKS=$(($DEV_SIZE / $BLOCK_SIZE))
-
-FILE=image
-MOUNT=mount
-
-make
-
-if [ ! -f $FILE ]
+if [ -b m4_DEVICE ]
 then
-    echo "Creating wlfs image"
-    dd if=/dev/zero of=$FILE bs=$BLOCK_SIZE count=$BLOCKS
-    ./mkfs-wlfs -b $BLOCK_SIZE $FILE
+    BLOCK_SIZE=$(lsblk -o NAME,PHY-SEC | 
+                 grep $(basename m4_DEVICE) | 
+                 awk '{print $2}')
+else
+    BLOCK_SIZE=$(lsblk -o MOUNTPOINT,PHY-SEC | 
+                 grep "$(df $(dirname m4_DEVICE) --output=target | 
+                         tail -n 1) " |  
+                 awk '{print $2}')
 fi
-if [ ! -d $MOUNT ]
+BLOCKS=$((m4_DEVICE_SIZE / $BLOCK_SIZE))
+
+# Zero and reformat the test device
+dd if=/dev/zero of=m4_DEVICE bs=$BLOCK_SIZE count=$BLOCKS
+./mkfs-wlfs -b $BLOCK_SIZE m4_DEVICE
+# Perform validation testing for mkfs-wlfs
+./test/test_mkfs
+
+# Create the mount point if it doesn't exist
+if [ ! -d m4_MOUNT ]
 then
-    echo "Creating mount point"
-    mkdir $MOUNT
+    mkdir m4_MOUNT
 fi
 
-echo "Loading $MODULE module"
-if $(lsmod | grep wlfs)
+MODULE=$(sed -rn 's/.*\.name = "(.*?)".*/\1/p' init.c)
+# Reload the kernel module if necessary
+if [ -n "$(lsmod | grep $MODULE)" ]
 then
     sudo rmmod $MODULE
 fi
 sudo insmod ${MODULE}.ko
- 
-echo "Mounting $FILE on $MOUNT"
-if $(sudo mount -o loop -t $MODULE $FILE $MOUNT)
+
+# Run validations tests
+if ! $(sudo mount -o loop -t $MODULE m4_DEVICE m4_MOUNT)
 then
-    echo "Mounting $FILE successful!"
-    sudo umount $MOUNT
-else
     echo "Mounting unsuccessful"
+    exit 1
 fi
+
+# Clean up
+sudo umount m4_MOUNT
 sudo rmmod $MODULE

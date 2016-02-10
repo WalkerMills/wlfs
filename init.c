@@ -40,9 +40,9 @@ static void __exit wlfs_exit (void) {
 #endif
     if (unlikely(unregister_filesystem(&wlfs_type))) {
         printk(KERN_ERR "Failed to unregister filesystem");
+    } else {
+        printk(KERN_INFO "Unloaded wlfs\n");
     }
-
-    printk(KERN_INFO "Unloaded wlfs\n");
 }
 
 module_init(wlfs_init);
