@@ -157,7 +157,7 @@ enum return_code build_super (int fd, struct wlfs_super_meta *sb, bool round) {
         return -INVALID_ARGUMENT;
     }
 #ifndef NDEBUG
-    printf("Device is %lluB, with %lluB blocks\n", size, sb->block_size);
+    printf("Device is %lluB, with %huB blocks\n", size, sb->block_size);
 #endif
 
     // Set the number of checkpoint blocks
