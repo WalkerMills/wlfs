@@ -19,6 +19,7 @@ test: all $(M4_CONFIG) test_mkfs
 ko:
 	$(MAKE) -C $(KDIR)/build M=$(PWD) modules
 
+# mkfs-wlfs.o: private CFLAGS = -DNDEBUG
 util-user.o: util.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 mkfs-wlfs: util-user.o
@@ -27,5 +28,5 @@ $(TEST_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(M4_CONFIG)
 	m4 $(M4_CONFIG) $< | $(CC) $(CFLAGS) -xc -Wall -c -o $@ -
 
 test_%: $(TEST_DIR)/test_%.o
-	$(CC) $(LDFLAGS) -lcmocka -o $(TEST_DIR)/$@ $^
+	$(CC) $(LDFLAGS) -lcheck -o $(TEST_DIR)/$@ $^
 

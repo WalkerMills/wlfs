@@ -1,20 +1,17 @@
 #!/bin/bash
 
-BLOCK_SIZE=0
-echo $BLOCK_SIZE
-if [ -b M4_DEVICE ]
+if [ -b m4_DEVICE ]
 then
     BLOCK_SIZE=$(lsblk -o NAME,PHY-SEC | 
-                 grep $(basename M4_DEVICE) | 
+                 grep $(basename m4_DEVICE) | 
                  awk '{print $2}')
 else
     BLOCK_SIZE=$(lsblk -o MOUNTPOINT,PHY-SEC | 
-                 grep "$(df $(dirname M4_DEVICE) --output=target | 
-                         tail -n 1)" |  
+                 grep "$(df $(dirname m4_DEVICE) --output=target | 
+                         tail -n 1) " |  
                  awk '{print $2}')
 fi
-echo $BLOCK_SIZE
-BLOCKS=$((M4_DEVICE_SIZE / $BLOCK_SIZE))
+BLOCKS=$((m4_DEVICE_SIZE / $BLOCK_SIZE))
 
 # Zero and reformat the test device
 dd if=/dev/zero of=m4_DEVICE bs=$BLOCK_SIZE count=$BLOCKS
