@@ -24,9 +24,6 @@ util-user.o: util.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 mkfs-wlfs: util-user.o
 
-$(TEST_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(M4_CONFIG)
-	m4 $(M4_CONFIG) $< | $(CC) $(CFLAGS) -xc -Wall -c -o $@ -
-
-test_%: $(TEST_DIR)/test_%.o
-	$(CC) $(LDFLAGS) -lcheck -o $(TEST_DIR)/$@ $^
-
+test_%: $(TEST_DIR)/test_%.c $(M4_CONFIG)
+	m4 $(M4_CONFIG) $< | \
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -lgtest -x c++ -Wall -o $(TEST_DIR)/$@ -

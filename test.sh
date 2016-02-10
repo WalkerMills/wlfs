@@ -17,7 +17,7 @@ BLOCKS=$((m4_DEVICE_SIZE / $BLOCK_SIZE))
 dd if=/dev/zero of=m4_DEVICE bs=$BLOCK_SIZE count=$BLOCKS
 ./mkfs-wlfs -b $BLOCK_SIZE m4_DEVICE
 # Perform validation testing for mkfs-wlfs
-test/test_mkfs
+./test/test_mkfs
 
 # Create the mount point if it doesn't exist
 if [ ! -d m4_MOUNT ]
