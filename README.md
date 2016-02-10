@@ -6,9 +6,15 @@ You must download the Linux kernel headers to compile this kernel module; Google
 ```
 # pacman -S linux-headers m4 gtest
 ```
-On Debian:
+On Debian, gtest source is distributed instead of precompiled libraries:
 ```
-# apt-get install linux-headers m4 libgtest-dev
+# apt-get install linux-headers m4 libgtest-dev cmake
+# mkdir /tmp/gtest && cd !$
+# cmake -DBUILD_SHARED_LIBS=1 /usr/src/gtest
+# make
+# mv libgtest* /usr/lib
+# cd .. && rm -r gtest
+# apt-get remove --purge cmake -y && apt-get autoremove -y
 ```
 You must also copy the kernel configuration to the build directory.  To copy the configuration of the currently running kernel:
 ```
